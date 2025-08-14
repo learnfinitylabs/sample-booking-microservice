@@ -12,6 +12,10 @@
     "db:seed": "node scripts/seed.js",
     "db:seed:home-services": "node scripts/seed-home-services.js",
     "db:check:home-services": "node scripts/check-home-services.js",
+    "db:sync-env": "node scripts/sync-env-keys.js",
+    "deploy:dev": "./scripts/deploy.sh development",
+    "deploy:staging": "./scripts/deploy.sh staging", 
+    "deploy:prod": "./scripts/deploy.sh production",
     "test:api": "node test-api.js",
     "start": "node build/index.js"
   },

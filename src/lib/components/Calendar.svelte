@@ -61,7 +61,6 @@
 
 	// Navigation functions
 	function navigatePrevious() {
-		console.log('navigatePrevious called, current displayDate:', $displayDate);
 		const currentDisplayDate = $displayDate;
 		switch (view) {
 			case 'month':
@@ -74,12 +73,10 @@
 				displayDate.set(new Date(currentDisplayDate.getTime() - (24 * 60 * 60 * 1000)));
 				break;
 		}
-		console.log('navigatePrevious new displayDate:', $displayDate);
 		loadCalendarData();
 	}
 
 	function navigateNext() {
-		console.log('navigateNext called, current displayDate:', $displayDate);
 		const currentDisplayDate = $displayDate;
 		switch (view) {
 			case 'month':
@@ -92,7 +89,6 @@
 				displayDate.set(new Date(currentDisplayDate.getTime() + (24 * 60 * 60 * 1000)));
 				break;
 		}
-		console.log('navigateNext new displayDate:', $displayDate);
 		loadCalendarData();
 	}
 
@@ -300,10 +296,26 @@
 	}
 
 	$: timeSlots = getTimeSlots();
-	$: viewTitle = (() => {
-		console.log('Updating viewTitle, displayDate:', $displayDate, 'view:', view);
-		return getViewTitle();
-	})();
+	// Make viewTitle explicitly reactive to both displayDate and view
+	$: viewTitle = $displayDate && view ? (() => {
+		switch (view) {
+			case 'month':
+				return $displayDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+			case 'week':
+				const weekStart = getWeekStart($displayDate);
+				const weekEnd = addDays(weekStart, 6);
+				return `${formatDate(weekStart, 'MMM D')} - ${formatDate(weekEnd, 'MMM D, YYYY')}`;
+			case 'day':
+				return $displayDate.toLocaleDateString('en-US', { 
+					weekday: 'long', 
+					month: 'long', 
+					day: 'numeric', 
+					year: 'numeric' 
+				});
+			default:
+				return '';
+		}
+	})() : '';
 </script>
 
 <div class="calendar-container">

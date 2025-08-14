@@ -2,31 +2,93 @@
 	import Calendar from '$lib/components/Calendar.svelte';
 	import { onMount } from 'svelte';
 
-	// Demo tenant configurations
-	const tenants = [
-		{
-			name: 'Demo Office',
-			apiKey: '61d98f73-6746-4700-b388-93bd9de72801.uydigcx8engdm4az6mjhc',
-			description: 'Office spaces and meeting rooms'
-		},
-		{
-			name: 'QuickFix Home Services',
-			apiKey: 'be63b48e-6090-4724-b601-788d0100cd08.mmp728enuzhxy17fncpg4',
-			description: 'Home service providers and appointments'
-		}
-	];
-
-	let selectedTenant = tenants[1]; // Default to home services
-	let selectedTenantIndex = 1; // Track the selected index
+	// Dynamic tenant configurations - loaded from API
+	let tenants: Array<{
+		name: string;
+		apiKey: string;
+		description?: string;
+		domain?: string;
+	}> = [];
+	
+	let selectedTenant: any = null;
+	let selectedTenantIndex = 0;
 	let currentView: 'month' | 'week' | 'day' = 'month';
 	let mounted = false;
+	let loading = true;
+	let error: string | null = null;
+	let calendarKey = 0; // Key to force Calendar refresh when needed
+	let initialDate = new Date(); // Stable initial date reference
 
-	onMount(() => {
+	// Fetch tenant configuration on mount
+	onMount(async () => {
+		await loadTenantConfig();
 		mounted = true;
 	});
 
+	async function loadTenantConfig() {
+		try {
+			loading = true;
+			error = null;
+			
+			// Try to load from database first
+			const dbResponse = await fetch('/api/config/tenants/db');
+			const dbData = await dbResponse.json();
+			
+			if (dbData.success && dbData.data.tenants.length > 0) {
+				tenants = dbData.data.tenants.map((tenant: any) => ({
+					name: tenant.name,
+					apiKey: tenant.apiKey,
+					description: getDefaultDescription(tenant.name),
+					domain: tenant.domain
+				}));
+			} else {
+				// Fallback to environment-based config
+				const envResponse = await fetch('/api/config/tenants');
+				const envData = await envResponse.json();
+				
+				if (envData.success) {
+					tenants = envData.data.tenants.map((tenant: any) => ({
+						name: tenant.name,
+						apiKey: tenant.apiKey,
+						description: getDefaultDescription(tenant.name)
+					}));
+				} else {
+					throw new Error('Failed to load tenant configuration');
+				}
+			}
+			
+			// Set default selected tenant
+			if (tenants.length > 0) {
+				selectedTenantIndex = 0;
+				selectedTenant = tenants[0];
+			}
+		} catch (err) {
+			console.error('Error loading tenant config:', err);
+			error = 'Failed to load tenant configuration. Please check your environment setup.';
+		} finally {
+			loading = false;
+		}
+	}
+
+	function getDefaultDescription(name: string): string {
+		if (name.toLowerCase().includes('office')) {
+			return 'Office spaces and meeting rooms';
+		} else if (name.toLowerCase().includes('home') || name.toLowerCase().includes('service')) {
+			return 'Home service providers and appointments';
+		} else {
+			return 'Booking management system';
+		}
+	}
+
 	// Update selectedTenant when selectedTenantIndex changes
-	$: selectedTenant = tenants[selectedTenantIndex];
+	$: if (tenants.length > 0) {
+		const newTenant = tenants[selectedTenantIndex];
+		if (selectedTenant && selectedTenant.apiKey !== newTenant.apiKey) {
+			// Only increment key if API key actually changed
+			calendarKey++;
+		}
+		selectedTenant = newTenant;
+	}
 </script>
 
 <svelte:head>
@@ -67,41 +129,86 @@
 
 	<!-- Main Content -->
 	<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-		<!-- Tenant Info Card -->
-		<div class="bg-white rounded-lg shadow p-6 mb-6">
-			<div class="flex items-center justify-between">
-				<div>
-					<h2 class="text-xl font-semibold text-gray-900">{selectedTenant.name}</h2>
-					<p class="text-gray-600">{selectedTenant.description}</p>
-					<p class="text-sm text-gray-500 font-mono mt-1">API Key: {selectedTenant.apiKey.split('.')[0]}...</p>
+		{#if loading}
+			<!-- Loading State -->
+			<div class="bg-white rounded-lg shadow p-6 mb-6">
+				<div class="animate-pulse">
+					<div class="h-4 bg-gray-300 rounded w-1/4 mb-2"></div>
+					<div class="h-3 bg-gray-200 rounded w-1/2 mb-4"></div>
+					<div class="h-3 bg-gray-200 rounded w-3/4"></div>
 				</div>
-				
-				<!-- Quick Stats or Actions -->
-				<div class="flex items-center space-x-4">
-					<div class="text-center">
-						<div class="text-2xl font-bold text-blue-600">Live</div>
-						<div class="text-sm text-gray-500">Calendar Data</div>
+			</div>
+			<div class="bg-white rounded-lg shadow p-6">
+				<div class="animate-pulse">
+					<div class="h-8 bg-gray-300 rounded w-1/3 mb-4"></div>
+					<div class="grid grid-cols-7 gap-4">
+						{#each Array(21) as _}
+							<div class="h-16 bg-gray-200 rounded"></div>
+						{/each}
 					</div>
 				</div>
 			</div>
-		</div>
-
-		<!-- Calendar Component -->
-		{#if mounted}
-			{#key selectedTenant.apiKey}
-				<Calendar 
-					apiKey={selectedTenant.apiKey}
-					view={currentView}
-					currentDate={new Date()}
-				/>
-			{/key}
+		{:else if error}
+			<!-- Error State -->
+			<div class="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+				<div class="flex items-center">
+					<svg class="w-5 h-5 text-red-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+						<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+					</svg>
+					<h3 class="text-lg font-medium text-red-800">Configuration Error</h3>
+				</div>
+				<p class="mt-2 text-red-700">{error}</p>
+				<button 
+					class="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+					on:click={loadTenantConfig}
+				>
+					Retry
+				</button>
+			</div>
+		{:else if tenants.length === 0}
+			<!-- No Tenants State -->
+			<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
+				<div class="flex items-center">
+					<svg class="w-5 h-5 text-yellow-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+						<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+					</svg>
+					<h3 class="text-lg font-medium text-yellow-800">No Tenants Configured</h3>
+				</div>
+				<p class="mt-2 text-yellow-700">No tenant API keys found. Please configure environment variables or check database.</p>
+			</div>
 		{:else}
-			<div class="bg-white rounded-lg shadow p-8">
-				<div class="flex items-center justify-center">
-					<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-					<span class="ml-2 text-gray-600">Loading calendar...</span>
+			<!-- Tenant Info Card -->
+			<div class="bg-white rounded-lg shadow p-6 mb-6">
+				<div class="flex items-center justify-between">
+					<div>
+						<h2 class="text-xl font-semibold text-gray-900">{selectedTenant.name}</h2>
+						<p class="text-gray-600">{selectedTenant.description}</p>
+						<p class="text-sm text-gray-500 font-mono mt-1">API Key: {selectedTenant.apiKey.split('.')[0]}...</p>
+						{#if selectedTenant.domain}
+							<p class="text-sm text-gray-500 mt-1">Domain: {selectedTenant.domain}</p>
+						{/if}
+					</div>
+					
+					<!-- Quick Stats or Actions -->
+					<div class="flex items-center space-x-4">
+						<div class="text-center">
+							<div class="text-2xl font-bold text-blue-600">Live</div>
+							<div class="text-sm text-gray-500">Calendar Data</div>
+						</div>
+					</div>
 				</div>
 			</div>
+
+			<!-- Calendar Component -->
+			{#if mounted && selectedTenant}
+				{#key calendarKey}
+					<Calendar 
+						apiKey={selectedTenant.apiKey}
+						view={currentView}
+						currentDate={initialDate}
+					/>
+				{/key}
+			{/if}
 		{/if}
 
 		<!-- Instructions -->
