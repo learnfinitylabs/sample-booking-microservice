@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: booking_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: booking123
+      MYSQL_DATABASE: booking_microservice
+      MYSQL_USER: booking_user
+      MYSQL_PASSWORD: booking_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    command: --default-authentication-plugin=mysql_native_password
+    
+  booking-service:
+    build: .
+    container_name: booking_service
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: booking_user
+      DB_PASSWORD: booking_pass
+      DB_NAME: booking_microservice
+      JWT_SECRET: super-secret-jwt-key-for-production
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mysql
+    volumes:
+      - ./:/app
+      - /app/node_modules
+
+volumes:
+  mysql_data:
