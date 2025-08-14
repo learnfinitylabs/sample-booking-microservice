@@ -141,8 +141,18 @@
 
 <div class="container">
 	<header>
-		<h1>🗓️ Booking Microservice Demo</h1>
-		<p>Multi-tenant headless booking system with SvelteKit & MySQL</p>
+		<div class="header-content">
+			<div class="title-section">
+				<h1>🗓️ Booking Microservice Demo</h1>
+				<p>Multi-tenant headless booking system with SvelteKit & MySQL</p>
+			</div>
+			
+			<!-- Navigation Links -->
+			<nav class="navigation">
+				<a href="/" class="nav-link active">API Demo</a>
+				<a href="/calendar" class="nav-link">📅 Calendar UI</a>
+			</nav>
+		</div>
 	</header>
 
 	{#if error}
@@ -296,19 +306,56 @@
 	}
 
 	header {
-		text-align: center;
 		margin-bottom: 3rem;
 	}
 
-	header h1 {
+	.header-content {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 2rem;
+	}
+
+	.title-section h1 {
 		font-size: 2.5rem;
 		color: #333;
 		margin-bottom: 0.5rem;
 	}
 
-	header p {
+	.title-section p {
 		font-size: 1.2rem;
 		color: #666;
+		margin: 0;
+	}
+
+	.navigation {
+		display: flex;
+		gap: 1rem;
+	}
+
+	.nav-link {
+		padding: 0.75rem 1.5rem;
+		border-radius: 8px;
+		text-decoration: none;
+		font-weight: 600;
+		transition: all 0.2s;
+		border: 2px solid transparent;
+	}
+
+	.nav-link.active {
+		background: #007acc;
+		color: white;
+	}
+
+	.nav-link:not(.active) {
+		color: #666;
+		border-color: #e1e5e9;
+	}
+
+	.nav-link:not(.active):hover {
+		background: #f8f9fa;
+		color: #333;
 	}
 
 	.alert {
@@ -521,6 +568,15 @@
 	@media (max-width: 768px) {
 		.container {
 			padding: 1rem;
+		}
+		
+		.header-content {
+			flex-direction: column;
+			text-align: center;
+		}
+		
+		.navigation {
+			justify-content: center;
 		}
 		
 		.form-row {

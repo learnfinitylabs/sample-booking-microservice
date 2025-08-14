@@ -44,13 +44,17 @@ export interface Booking {
 	userId?: string;
 	title: string;
 	description?: string;
-	startTime: Date;
-	endTime: Date;
+	startTime: string; // ISO string for API compatibility
+	endTime: string; // ISO string for API compatibility
 	status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
 	externalReference?: string;
 	metadata?: Record<string, any>;
 	createdAt: Date;
 	updatedAt: Date;
+	// Additional properties from API responses
+	resourceName?: string;
+	resourceCategory?: string;
+	userDisplayName?: string;
 }
 
 export interface AvailabilityWindow {
