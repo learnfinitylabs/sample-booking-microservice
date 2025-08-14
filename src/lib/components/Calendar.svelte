@@ -14,13 +14,11 @@
 	const resources = writable<Resource[]>([]);
 	const loading = writable(false);
 	const error = writable<string | null>(null);
+	const displayDate = writable(new Date(currentDate));
 
 	// Modal state
 	let selectedBooking: Booking | null = null;
 	let showModal = false;
-
-	// Calendar navigation
-	let displayDate = new Date(currentDate);
 
 	onMount(() => {
 		// Don't call loadCalendarData here - let the reactive statement handle it
@@ -38,7 +36,8 @@
 		error.set(null);
 
 		try {
-			const month = formatDate(displayDate, 'YYYY-MM');
+			const currentDisplayDate = $displayDate;
+			const month = formatDate(currentDisplayDate, 'YYYY-MM');
 			const response = await fetch(`/api/calendar?month=${month}`, {
 				headers: {
 					'X-API-Key': apiKey
@@ -62,39 +61,43 @@
 
 	// Navigation functions
 	function navigatePrevious() {
+		console.log('navigatePrevious called, current displayDate:', $displayDate);
+		const currentDisplayDate = $displayDate;
 		switch (view) {
 			case 'month':
-				displayDate.setMonth(displayDate.getMonth() - 1);
+				displayDate.set(new Date(currentDisplayDate.getFullYear(), currentDisplayDate.getMonth() - 1, currentDisplayDate.getDate()));
 				break;
 			case 'week':
-				displayDate.setDate(displayDate.getDate() - 7);
+				displayDate.set(new Date(currentDisplayDate.getTime() - (7 * 24 * 60 * 60 * 1000)));
 				break;
 			case 'day':
-				displayDate.setDate(displayDate.getDate() - 1);
+				displayDate.set(new Date(currentDisplayDate.getTime() - (24 * 60 * 60 * 1000)));
 				break;
 		}
-		displayDate = new Date(displayDate);
+		console.log('navigatePrevious new displayDate:', $displayDate);
 		loadCalendarData();
 	}
 
 	function navigateNext() {
+		console.log('navigateNext called, current displayDate:', $displayDate);
+		const currentDisplayDate = $displayDate;
 		switch (view) {
 			case 'month':
-				displayDate.setMonth(displayDate.getMonth() + 1);
+				displayDate.set(new Date(currentDisplayDate.getFullYear(), currentDisplayDate.getMonth() + 1, currentDisplayDate.getDate()));
 				break;
 			case 'week':
-				displayDate.setDate(displayDate.getDate() + 7);
+				displayDate.set(new Date(currentDisplayDate.getTime() + (7 * 24 * 60 * 60 * 1000)));
 				break;
 			case 'day':
-				displayDate.setDate(displayDate.getDate() + 1);
+				displayDate.set(new Date(currentDisplayDate.getTime() + (24 * 60 * 60 * 1000)));
 				break;
 		}
-		displayDate = new Date(displayDate);
+		console.log('navigateNext new displayDate:', $displayDate);
 		loadCalendarData();
 	}
 
 	function goToToday() {
-		displayDate = new Date();
+		displayDate.set(new Date());
 		loadCalendarData();
 	}
 
@@ -137,15 +140,16 @@
 	}
 
 	function getViewTitle(): string {
+		const currentDisplayDate = $displayDate;
 		switch (view) {
 			case 'month':
-				return displayDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+				return currentDisplayDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 			case 'week':
-				const weekStart = getWeekStart(displayDate);
+				const weekStart = getWeekStart(currentDisplayDate);
 				const weekEnd = addDays(weekStart, 6);
 				return `${formatDate(weekStart, 'MMM D')} - ${formatDate(weekEnd, 'MMM D, YYYY')}`;
 			case 'day':
-				return displayDate.toLocaleDateString('en-US', { 
+				return currentDisplayDate.toLocaleDateString('en-US', { 
 					weekday: 'long', 
 					month: 'long', 
 					day: 'numeric', 
@@ -155,7 +159,8 @@
 	}
 
 	function getMonthDays(): Date[] {
-		const firstDay = new Date(displayDate.getFullYear(), displayDate.getMonth(), 1);
+		const currentDisplayDate = $displayDate;
+		const firstDay = new Date(currentDisplayDate.getFullYear(), currentDisplayDate.getMonth(), 1);
 		const startDate = getWeekStart(firstDay);
 		
 		const days: Date[] = [];
@@ -171,7 +176,8 @@
 	}
 
 	function getWeekDays(): Date[] {
-		const weekStart = getWeekStart(displayDate);
+		const currentDisplayDate = $displayDate;
+		const weekStart = getWeekStart(currentDisplayDate);
 		const days: Date[] = [];
 		
 		for (let i = 0; i < 7; i++) {
@@ -182,7 +188,8 @@
 	}
 
 	function isCurrentMonth(date: Date): boolean {
-		return date.getMonth() === displayDate.getMonth();
+		const currentDisplayDate = $displayDate;
+		return date.getMonth() === currentDisplayDate.getMonth();
 	}
 
 	function getBookingColor(booking: Booking): string {
@@ -224,14 +231,86 @@
 		};
 	}
 
+	// Check if two bookings overlap in time
+	function bookingsOverlap(booking1: Booking, booking2: Booking): boolean {
+		const start1 = new Date(booking1.startTime);
+		const end1 = new Date(booking1.endTime);
+		const start2 = new Date(booking2.startTime);
+		const end2 = new Date(booking2.endTime);
+		
+		return start1 < end2 && start2 < end1;
+	}
+
+	// Calculate layout positions for overlapping bookings
+	function calculateBookingLayout(bookings: Booking[], date: Date) {
+		if (bookings.length === 0) return [];
+		
+		// Sort bookings by start time
+		const sortedBookings = [...bookings].sort((a, b) => 
+			new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+		);
+		
+		const layout = [];
+		const columns = [];
+		
+		for (const booking of sortedBookings) {
+			// Find the first column where this booking doesn't overlap with existing bookings
+			let columnIndex = 0;
+			let placed = false;
+			
+			for (let i = 0; i < columns.length; i++) {
+				const column = columns[i];
+				const hasOverlap = column.some(existingBooking => bookingsOverlap(booking, existingBooking));
+				
+				if (!hasOverlap) {
+					columns[i].push(booking);
+					columnIndex = i;
+					placed = true;
+					break;
+				}
+			}
+			
+			// If no existing column works, create a new one
+			if (!placed) {
+				columns.push([booking]);
+				columnIndex = columns.length - 1;
+			}
+			
+			layout.push({
+				...booking,
+				layoutColumn: columnIndex,
+				layoutWidth: columns.length
+			});
+		}
+		
+		// Update width for all bookings based on total columns
+		const totalColumns = columns.length;
+		return layout.map(booking => ({
+			...booking,
+			layoutWidth: totalColumns
+		}));
+	}
+
+	function getBookingLayoutStyle(booking, slotIndex) {
+		const position = getBookingPosition(booking, slotIndex);
+		const widthPercent = 100 / booking.layoutWidth;
+		const leftPercent = (booking.layoutColumn * widthPercent);
+		
+		return `top: ${position.top}; height: ${position.height}; left: ${leftPercent}%; width: ${widthPercent - 1}%;`;
+	}
+
 	$: timeSlots = getTimeSlots();
+	$: viewTitle = (() => {
+		console.log('Updating viewTitle, displayDate:', $displayDate, 'view:', view);
+		return getViewTitle();
+	})();
 </script>
 
 <div class="calendar-container">
 	<!-- Header -->
 	<div class="calendar-header">
 		<div class="flex items-center space-x-4">
-			<h1 class="text-xl font-semibold text-gray-900">{getViewTitle()}</h1>
+			<h1 class="text-xl font-semibold text-gray-900">{viewTitle}</h1>
 			
 			<!-- View switcher -->
 			<div class="view-switcher">
@@ -375,13 +454,14 @@
 									{timeSlot}
 								</div>
 								{#each getWeekDays() as day}
-									<div class="time-content border-l border-gray-100">
-										{#each getBookingsForTimeSlot(day, slotIndex) as booking}
-											{@const position = getBookingPosition(booking, slotIndex)}
+									{@const dayBookings = getBookingsForTimeSlot(day, slotIndex)}
+									{@const layoutBookings = calculateBookingLayout(dayBookings, day)}
+									<div class="time-content border-l border-gray-100 relative">
+										{#each layoutBookings as booking}
 											<button
 												type="button"
-												class="absolute left-1 right-1 px-2 py-1 text-xs rounded font-medium text-white transition-opacity hover:opacity-80 z-10 {getBookingColor(booking)}"
-												style="top: {position.top}; height: {position.height}; min-height: 20px;"
+												class="absolute px-2 py-1 text-xs rounded font-medium text-white transition-opacity hover:opacity-80 z-10 {getBookingColor(booking)}"
+												style="{getBookingLayoutStyle(booking, slotIndex)} min-height: 20px;"
 												on:click={() => openBookingModal(booking)}
 											>
 												<div class="truncate">{booking.title}</div>
@@ -399,24 +479,25 @@
 					<!-- Day header -->
 					<div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
 						<h2 class="text-lg font-semibold text-gray-900">
-							{displayDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+							{$displayDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
 						</h2>
 					</div>
 					
 					<!-- Time slots -->
 					<div class="max-h-96 overflow-y-auto">
 						{#each timeSlots as timeSlot, slotIndex}
+							{@const dayBookings = getBookingsForTimeSlot($displayDate, slotIndex)}
+							{@const layoutBookings = calculateBookingLayout(dayBookings, $displayDate)}
 							<div class="time-slot flex">
 								<div class="time-label">
 									{timeSlot}
 								</div>
-								<div class="time-content">
-									{#each getBookingsForTimeSlot(displayDate, slotIndex) as booking}
-										{@const position = getBookingPosition(booking, slotIndex)}
+								<div class="time-content relative">
+									{#each layoutBookings as booking}
 										<button
 											type="button"
-											class="absolute left-2 right-2 px-3 py-2 text-sm rounded font-medium text-white transition-opacity hover:opacity-80 {getBookingColor(booking)}"
-											style="top: {position.top}; height: {position.height}; min-height: 30px;"
+											class="absolute px-3 py-2 text-sm rounded font-medium text-white transition-opacity hover:opacity-80 {getBookingColor(booking)}"
+											style="{getBookingLayoutStyle(booking, slotIndex)} min-height: 30px; margin-left: 0.5rem; margin-right: 0.5rem;"
 											on:click={() => openBookingModal(booking)}
 										>
 											<div class="font-semibold">{booking.title}</div>
